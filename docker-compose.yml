@@ -1,78 +1,60 @@
-# 示例插件：nginx 显示一个网页，向登录的人问好。改成自己的应用见 https://github.com/wontonapp/wonton-docs/blob/main/develop.md#写插件。
+# Scribble.rs：开源的网页版你画我猜，无账号，打开网页就能一起玩。上游 https://github.com/scribble-rs/scribble.rs（BSD-3-Clause）。
 services:
-  web:
-    # 镜像按摘要固定（多架构镜像写清单列表的摘要），标签只给人看。
-    image: nginx:1.31.8-alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11
+  game:
+    # 上游官方镜像。scratch 底镜像，容器里只有 /scribblers 一个可执行文件，按清单列表摘要固定。
+    image: biosmarcel/scribble.rs:v0.9.14@sha256:9d1d651538de3a95e2d318f134ad9c1e9740945cb87835ac7c1cdfbd82a9c775
     environment:
-      # 网关代登录：SSI 回显的 Remote-User 只信核心带来的。官方镜像启动时对 templates 目录里的
-      # *.template 做 envsubst，把下面的地址换进 nginx 配置（见 web/default.conf.template）。
-      WONTON_CORE_ADDRESS: ${WONTON_CORE_ADDRESS}
-    # 包里的文件经 configs 交给容器（核心在启动前写进去），不能用卷挂载。
-    configs:
-      - source: site
-        target: /etc/nginx/templates/default.conf.template
-      - source: page
-        target: /usr/share/nginx/html/index.html
-      - source: tokens
-        target: /usr/share/nginx/html/tokens.css
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
-      interval: 30s
-      timeout: 5s
-      start_period: 30s
-      start_interval: 1s
-
-configs:
-  site:
-    file: web/default.conf.template
-  page:
-    file: web/index.html
-  tokens:
-    file: web/tokens.css
+      PORT: "8080"
+      # 大厅公开指它出现在本实例首页的大厅列表里，家人打开插件就能点进去；实例只在网关登录后面，列表给不到外人。
+      LOBBY_SETTING_DEFAULTS_PUBLIC: "true"
+      # 所有玩家都经核心网关进来，应用看到的来源地址是同一个；上游默认每地址限 2 人，会把第三个家人挡在大厅外。
+      # 取应用允许的上限（24），单个大厅还是受大厅人数上限约束。
+      LOBBY_SETTING_DEFAULTS_CLIENTS_PER_IP_LIMIT: "24"
+    # 没有健康检查：镜像里除 /scribblers 外没有任何可执行文件（无 shell、无 wget/curl），
+    # 应用也没有健康子命令，容器内探测做不了；见 README 的「已知限制」。
 
 x-wonton:
-  spec: "0.6"
-  # 换成你自己的：反向域名形式，装上以后不能改。
-  id: app.example.hello
-  version: 0.1.1
+  spec: "0.12"
+  id: app.scribble-rs.game
+  version: 0.1.0
   kind: app
-  title: { zh: 你好, en: Hello }
-  description: { zh: 向登录的人问好的示例网页, en: An example page that greets whoever is signed in }
+  title: { zh: 你画我猜（Scribble.rs）, en: Scribble.rs }
+  description: { zh: "家人一起玩的你画我猜：一人画画，其他人抢猜词语", en: "A pictionary game for the family: one draws, everyone else guesses" }
   icon: icon.svg
   notices: [NOTICE]
-  screenshots: [screenshots/home.png]
-  author: { name: Example }
-  homepage: https://nginx.org
-  # 应用（这里是 nginx）的许可证；插件包自己的许可证写在仓库的 LICENSE 里。
-  license: BSD-2-Clause
+  screenshots: [screenshots/create-lobby.jpg, screenshots/drawing.jpg]
+  author: { name: wontonapp, url: https://github.com/wontonapp }
+  homepage: https://github.com/scribble-rs/scribble.rs
+  # 应用（scribble.rs）的许可证；插件包自己的许可证在 LICENSE 里。
+  license: BSD-3-Clause
   tags:
-    zh: [工具]
-    en: [Tools]
+    zh: [游戏, 家庭]
+    en: [Games, Family]
   about:
     zh: |
-      一个示例网页：登录以后，页面会向你问好。新建插件时可以照着改。
+      全家人一起玩的你画我猜：一个人照着词画画，其他人抢着猜，像聚会里的画图猜词游戏。
+
+      打开插件，建一个大厅，家人在列表里点开就能加入，同一个局域网或在外网都行。
+      内置词库没有中文，想用中文玩就把仓库里 words/中文词库.txt 的内容粘贴到「自定义词」。
     en: |
-      An example page: once you are signed in, the page says hello. Copy it as a starting point for a new plugin.
-  release_notes: { zh: 名字和说明更新。, en: Product name and description update. }
+      A family pictionary game: one player draws the word, everyone else races to guess it.
+
+      Open the plugin and create a lobby; family members join from the lobby list. The built-in word lists have no Chinese — paste the contents of words/中文词库.txt into "Custom words" to play in Chinese.
+  release_notes: { zh: 第一版。, en: First release. }
   webui:
-    service: web
-    port: 80
-    # 示例页回显网关注入的用户名，见 https://github.com/wontonapp/wonton-docs/blob/main/plugin-spec.md#网关代登录sso-proxy。
-    sso: proxy
-    proxy:
-      headers:
-        Remote-User: "{user}"
-  # 能放进侧边栏“我的应用”的页面，见 https://github.com/wontonapp/wonton-docs/blob/main/plugin-spec.md#应用页面tabs。放不放由用户决定。
+    service: game
+    port: 8080
+    # 应用没有账号体系，谁打开谁玩；网页仍然只在网关登录后面可达。
+    sso: none
   tabs:
-    - id: home
-      title: { zh: 主页, en: Home }
-      icon: tabs/home.svg
-      icon_selected: tabs/home-fill.svg
+    - id: play
+      title: { zh: 你画我猜, en: Play }
+      icon: tabs/play.svg
+      icon_selected: tabs/play-fill.svg
       path: /
-      # 这个页面没做适配，用默认的 inset：从状态栏下沿开始，页面不用管安全区。
-      # 想让内容从状态栏后面滚过，写 layout: edge-to-edge，并用 --wonton-inset-* 留出系统安全区的位置。
   permissions: []
-  # 上游 nginx 官方镜像，amd64 和 arm64 都有；上游没写最低内存，按本机空闲实测取整（实测约 24M，取 64M）。
+  # 上游镜像有 amd64 和 arm64（github.com/scribble-rs/scribble.rs 的 docker-image-update 工作流，v0.9.14 已核对）。
+  # 上游没写最低内存；本机实测空闲约 13M（2026-11-12，scratch 镜像单进程），取 64M。
   requirements:
     arch: [amd64, arm64]
     memory: 64M
